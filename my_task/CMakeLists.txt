@@ -2,6 +2,8 @@
 set(SOURCES
 task.h
 task.cpp
+ft.cpp
+ft.h
 )
 
 # создаем статическую библиотеку

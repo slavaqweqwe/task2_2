@@ -2,40 +2,32 @@
 using namespace testspace;
 
 
-std::vector<std::complex< double >> testspace::myfft(std::vector<std::complex< double >> vect) {
-    int n = 0;
-    size_t vectSize = vect.size();
-    while (vectSize % 2 == 0) {
-        n++;
-        vectSize /= 2;
-    }
-    int elementsInBlock = vectSize;//N/(2^n)
-    int numOfBlock = 1 << n;
+using complex = std::complex< double >;
 
 
-    std::vector<std::complex< double >> vect_block(vect.size());
-    std::vector<size_t> blockAddr(vect.size());
+std::vector<size_t> FindAddrs(size_t VectSize, int n, size_t numOfBlock, size_t elementsInBlock) {
+    std::vector<size_t> AddrsFFtElements(VectSize); //2
     if (n == 0) {
-        for (int i = 0; i < vect.size(); i++) {
-            blockAddr[i] = i;
+        for (int i = 0; i < VectSize; i++) {
+            AddrsFFtElements[i] = i;
         }
     }
     if (n == 1) {
-        for (int i = 0; i < vect.size() / 2; i++) {
-            blockAddr[i] = i * 2;
-            blockAddr[i + vect.size() / 2] = i * 2 + 1;
+        for (int i = 0; i < VectSize / 2; i++) {
+            AddrsFFtElements[i] = i * 2;
+            AddrsFFtElements[i + VectSize / 2] = i * 2 + 1;
         }
     }
     if (n > 1) {
-        for (int i = 0; i < elementsInBlock; i++) {
-            blockAddr[i] = i * numOfBlock;
+        for (size_t i = 0; i < elementsInBlock; i++) {
+            AddrsFFtElements[i] = i * numOfBlock;
         }
 
         int k = 1;
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < elementsInBlock; i++) {
-                blockAddr[i + elementsInBlock * k] = blockAddr[i] + numOfBlock / (k * 2);
-                blockAddr[i + elementsInBlock * 3] += blockAddr[i] + numOfBlock / (k * 2);
+                AddrsFFtElements[i + elementsInBlock * k] = AddrsFFtElements[i] + numOfBlock / (k * 2);
+                AddrsFFtElements[i + elementsInBlock * 3] += AddrsFFtElements[i] + numOfBlock / (k * 2);
             }
             k++;
         }
@@ -43,63 +35,79 @@ std::vector<std::complex< double >> testspace::myfft(std::vector<std::complex< d
         while (numOfBlock / (1 << (k - 1)) > 4) {
 
             for (int i = 0; i < elementsInBlock * 4 * k; i++) {
-                blockAddr[i + elementsInBlock * 4 * k] = blockAddr[i] + numOfBlock / (k * 8);
+                AddrsFFtElements[i + elementsInBlock * 4 * k] = AddrsFFtElements[i] + numOfBlock / (k * 8);
             }
             k++;
         }
     }
+    return AddrsFFtElements;
+}
+std::vector<complex> GetElementaryBlocks(std::vector<complex> vect,int n, size_t numOfBlock, size_t elementsInBlock){
 
 
-    std::complex< double > comp_one(0, 1.0);
-    std::complex< double > main_exp = exp(comp_one * (-1.0 * 2 * PI / elementsInBlock));
+    complex CompOne(0, 1.0);
+    complex MainExp = exp(CompOne * (-1.0 * 2 * PI / elementsInBlock));
+    std::vector<size_t> AddrsFFtElements = FindAddrs(vect.size(), n, numOfBlock, elementsInBlock);//2
+    std::vector<complex> VectExp(elementsInBlock);
+    std::vector<complex> VectorPreparedBlocks(vect.size());
 
+    VectExp[0] = 1;
+    for (int i = 1; i < elementsInBlock; i++)
     {
-        std::vector<std::complex< double >> vect_exp(elementsInBlock);
+        VectExp[i] = VectExp[i - 1] * MainExp;
+    }
 
-        vect_exp[0] = 1;
-        for (int i = 1; i < elementsInBlock; i++)
+
+    for (int i = 0; i < numOfBlock; i++)
+    {
+        for (int j = 0; j < elementsInBlock; j++)
         {
-            vect_exp[i] = vect_exp[i - 1] * main_exp;
-        }
-
-
-        for (int i = 0; i < numOfBlock; i++)
-        {
-            for (int j = 0; j < elementsInBlock; j++)
-            {
-                for (int m = 0; m < elementsInBlock; m++) {
-                    vect_block[i * elementsInBlock + j] += vect[blockAddr[i * elementsInBlock + m]] * vect_exp[(j * m) % elementsInBlock];
-                }
+            for (int m = 0; m < elementsInBlock; m++) {
+                VectorPreparedBlocks[i * elementsInBlock + j] += vect[AddrsFFtElements[i * elementsInBlock + m]] * VectExp[(j * m) % elementsInBlock];
             }
         }
     }
+    return VectorPreparedBlocks;
+}
 
-    int k = 1;
-    std::complex<double> buff;
-    std::complex<double> e;
+
+std::vector<complex> testspace::myfft(std::vector<complex> vect) {
+    int n = 0;//the power of two in the length of the vector
+    size_t elementsInBlock = vect.size();
+    while (elementsInBlock % 2 == 0) {
+        n++;
+        elementsInBlock /= 2;
+    }
+    size_t numOfBlock = 1 << n;
+    std::vector<complex> FFTvector = GetElementaryBlocks(vect, n, numOfBlock, elementsInBlock);
+
+
+    complex CompOne(0, 1.0);
+    complex buff;
+    complex e;
     int znam;
-    std::vector<std::complex< double >> vect_exp(vect.size());
+    std::vector<complex> VectExp(vect.size());
+    VectExp[0] = 1;
+
     for (int i = 0; i < n; i++) {
         znam = (vect.size() / (1 << (n - i - 1)));
-        e = exp(comp_one * ((-1.0 * 2 * PI) / znam));
-        vect_exp[0] = 1;
+        e = exp(CompOne * ((-1.0 * 2 * PI) / znam));
         for (int j = 1; j < znam; j++) {
-            vect_exp[j] = vect_exp[j - 1] * e;
-
+            VectExp[j] = VectExp[j - 1] * e;
         }
 
         for (int j = 0; j < numOfBlock / (2 << i); j++) {
             int act = elementsInBlock * (2 << i);
 
             for (int m = act * j; m < act * j + act / 2; m++) {
-                buff = vect_block[m];
-                std::complex<double> exp_val = vect_exp[m % znam];// exp(comp_one * ((-1.0 * 2 * PI * m) / (vect.size() / (1 << (n - i - 1)))));
-                vect_block[m] = buff + exp_val * vect_block[m + act / 2];
-                vect_block[m + act / 2] = buff - exp_val * vect_block[m + act / 2];
+                buff = FFTvector[m];
+                std::complex<double> AddVal = VectExp[m % znam] * FFTvector[m + act / 2];
+                FFTvector[m] =           buff + AddVal;
+                FFTvector[m + act / 2] = buff - AddVal;
             }
         }
     }
 
 
-    return vect_block;
+    return FFTvector;
 }
